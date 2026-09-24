@@ -1,69 +1,79 @@
 # OTP verification with SEO Age Digital — step by step
 
-Your SEO Age Digital SMS panel (<http://sms.seoagedigital.com>) runs on the **DataGenIt** platform.
-Its API only *sends* SMS, so the website generates and checks the OTP itself:
+The form uses SEO Age Digital's **2Factor OTP API** (<http://sms.seoagedigital.com>):
 
 ```
-Visitor fills form ──► /api/send-otp ──► DataGenIt sms-api.php   (server makes a 6-digit OTP and SMSes it)
-Visitor types OTP  ──► /api/verify-otp                            (server checks it, no SMS API call)
-Verified           ──► /api/submit-lead ► Google Sheet            (only if the OTP was verified)
+Visitor fills form ──► /api/send-otp ───► API/generate_otp.php   (SEO Age Digital creates + SMSes the OTP, returns logid)
+Visitor types OTP  ──► /api/verify-otp ─► API/verify_otp.php     (checks OTP; valid 5 min, one-time use)
+Verified           ──► /api/submit-lead ► Google Sheet           (only verified numbers are saved)
 ```
-The API key stays on the server (Vercel). The OTP is never sent to the browser.
+Your auth key stays on the Vercel server. It never reaches the browser.
 
 ---
 
 ## Step 1 — SEO Age Digital panel
 1. Log in at <http://sms.seoagedigital.com>.
-2. Recharge **transactional / OTP SMS credits**.
+2. Recharge **OTP / transactional SMS credits**.
+3. Open **HTTP API** and **generate your auth key**. Copy it.
+4. Note your approved **Sender ID** (6 letters) and your **DLT Entity ID** (PE ID).
+5. **Do NOT turn on IP whitelisting** for the API. Vercel's server IPs keep changing, and the API would
+   reply `407 Access Denied`.
 
-## Step 2 — DLT: Sender ID + OTP template (mandatory in India)
-Ask SEO Age Digital to set this up, or do it yourself on a DLT portal (Jio / Airtel / Vilpower):
-1. **Sender ID (header):** 6 letters, e.g. `MBBSAD`.
-2. **OTP template** (Service Implicit category), for example:
-   ```
-   {#var#} is your OTP to verify your mobile number for MBBS admission enquiry. Valid for 10 minutes. - MBBSAD
-   ```
-3. Once approved, make sure the **Sender ID and template are added in your SEO Age Digital panel**.
-   Note the **DLT Template ID** and your **PE / Entity ID**.
+## Step 2 — Ask SEO Age Digital support
+- *"Please enable the 2Factor OTP API (generate_otp.php) on my account with my Sender ID."*
+- *"How many digits is the OTP, 4 or 6?"* The page expects **6**. If it's 4, change `otpLength: 6` to `4`
+  in the `CONFIG` block of `index.html`. The form still accepts 4–8 digits, but only auto-submits at `otpLength`.
+- Optional: the default SMS text is *"Use {otp} as your OTP to access your account…"*. You can ask them to
+  set a custom DLT template, e.g. *"{otp} is your OTP for MBBS admission enquiry…"*.
 
-## Step 3 — Get your API key
-In the panel, open the **API** section (or ask SEO Age Digital support) and copy your **auth key**.
-
-## Step 4 — Test sending one SMS (from your browser)
-Replace the values. The message must match your approved template, with a number in place of `{#var#}`:
+## Step 3 — Test it in your browser (sends a real OTP to your phone)
 ```
-https://global.datagenit.com/API/sms-api.php?auth=YOUR_KEY&msisdn=91YOURNUMBER&senderid=MBBSAD&message=123456 is your OTP to verify your mobile number for MBBS admission enquiry. Valid for 10 minutes. - MBBSAD
+http://sms.seoagedigital.com/API/generate_otp.php?auth=YOUR_KEY&msisdn=YOUR_10_DIGIT_NUMBER&senderid=YOUR_SENDER_ID&entity_id=YOUR_ENTITY_ID
 ```
-- ✅ `{"status":"success",...}` and the SMS arrives → go to Step 5.
-- ❌ `Invalid Auth or inactive user` → try the same link with `http://sms.seoagedigital.com/API/sms-api.php` instead,
-  and if that works set `SMS_API_URL` to it in Step 5. Otherwise ask SEO Age Digital to activate API access.
-- ❌ Success but no SMS → the message doesn't match the DLT template exactly, or the Sender ID isn't mapped.
-  Ask SEO Age Digital whether they need `template_id` / `entity_id` in the API call.
+✅ `{"status":"success","logid":"5feb7b51aca0d","desc":"OTP Sent",...}` and you receive the SMS.
 
-## Step 5 — Vercel Environment Variables
+Then verify it (use the `logid` from above and the OTP from the SMS):
+```
+http://sms.seoagedigital.com/API/verify_otp.php?auth=YOUR_KEY&msisdn=YOUR_10_DIGIT_NUMBER&logid=LOGID&otp=OTP_FROM_SMS
+```
+✅ `{"status":"success","code":200,"desc":"OTP verified successfully",...}`
+
+If Step 3 fails, see the error table at the bottom and fix it with SEO Age Digital before continuing.
+
+## Step 4 — Vercel Environment Variables
 Vercel → project → **Settings → Environment Variables** (Production):
 
 | Name | Value | Required |
 |---|---|---|
-| `SMS_API_KEY` | your auth key (Step 3) | ✅ |
-| `SMS_SENDER_ID` | your Sender ID, e.g. `MBBSAD` | ✅ |
-| `SMS_TEMPLATE` | your DLT template with **`{otp}`** where `{#var#}` is, e.g.<br>`{otp} is your OTP to verify your mobile number for MBBS admission enquiry. Valid for 10 minutes. - MBBSAD` | ✅ |
+| `SMS_API_KEY` | your auth key | ✅ |
+| `SMS_SENDER_ID` | your 6-letter Sender ID | ✅ |
 | `OTP_SECRET` | any long random text (32+ characters) | ✅ |
+| `SMS_ENTITY_ID` | your DLT Entity ID (skip only if it's saved in the panel) | recommended |
+| `SMS_TEMPLATE_ID` | DLT template ID, if SEO Age Digital gives you one | optional |
 | `LEAD_WEBHOOK_URL` | Google Apps Script Web app URL (see `apps-script.gs`) | optional |
-| `SMS_API_URL` | only if Step 4 needed `http://sms.seoagedigital.com/API/sms-api.php` | optional |
-| `SMS_TEMPLATE_ID` / `SMS_ENTITY_ID` | only if SEO Age Digital says the API needs them | optional |
-| `OTP_LENGTH` | default `6`. If you change it, also change `otpLength` in `index.html` | optional |
 
 Then go to **Deployments → ⋯ → Redeploy**.
 
-## Step 6 — Protect your SMS credits
-Vercel → **Firewall → Add Rule**, per IP:
+## Step 5 — Protect your SMS credits
+Vercel → **Firewall → Add Rule** (per IP):
 - `/api/send-otp` → rate limit **5 requests / 10 minutes**
 - `/api/verify-otp` → rate limit **10 requests / 10 minutes**
 
-## Step 7 — Test the live site
-Fill the form with your own number, enter the SMS code, and check that the thank-you screen appears
-(and the lead appears in your Google Sheet). If it fails, open Vercel → **Logs** and look for
-`send-otp: provider error {...}`. That line shows the SMS panel's exact error.
+## Step 6 — Test the live site
+Fill the form with your own number, enter the OTP, and you should see the thank-you screen (and the lead in your Sheet).
+If it fails, open Vercel → **Logs** and look for `send-otp: provider error {...}` or `verify-otp: provider error {...}`.
 
 > On `localhost` the page runs in **demo mode** (the OTP is shown on screen and no SMS is sent).
+
+---
+
+### SEO Age Digital error codes
+| Code | Meaning | Fix |
+|---|---|---|
+| 402 / 412 | Invalid Auth / inactive user | Wrong `SMS_API_KEY`, or API not active on your account |
+| 407 | Access Denied | Turn off IP whitelisting in the panel |
+| 408 / 413 | Invalid / not approved Sender ID | Check `SMS_SENDER_ID` with SEO Age Digital |
+| 420 | Entity ID not found | Add `SMS_ENTITY_ID` or save it in the panel |
+| 429 / 436 | Low / insufficient balance | Recharge credits |
+| 419 | Invalid OTP | Visitor typed the wrong code (shown on the form) |
+| 421 / 422 | OTP expired / already used | Visitor taps **Resend OTP** (shown on the form) |

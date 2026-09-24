@@ -99,9 +99,9 @@ header{position:sticky;top:0;z-index:40;background:#fff;box-shadow:0 2px 14px rg
 .otp-box{display:none;background:#f3f6fc;border:1.5px dashed #c8d2e6;border-radius:14px;padding:14px;margin-bottom:14px}
 .otp-box.show{display:block}
 .otp-box p{font-size:13.5px;color:#344055;margin-bottom:10px}
-.otp-inputs{display:flex;gap:8px;justify-content:space-between;margin-bottom:10px}
-.otp-inputs input{width:100%;max-width:48px;height:52px;text-align:center;font:700 22px Poppins,sans-serif;border:1.5px solid var(--line);border-radius:10px;outline:none;background:#fff}
-.otp-inputs input:focus{border-color:var(--navy-2);box-shadow:0 0 0 3px rgba(19,45,107,.12)}
+.otp-input{width:100%;height:54px;margin-bottom:10px;text-align:center;font:700 26px Poppins,sans-serif;letter-spacing:.5em;padding-left:.5em;border:1.5px solid var(--line);border-radius:12px;outline:none;background:#fff;color:var(--navy)}
+.otp-input::placeholder{color:#c3cad8;letter-spacing:.2em}
+.otp-input:focus{border-color:var(--navy-2);box-shadow:0 0 0 3px rgba(19,45,107,.12)}
 .otp-meta{display:flex;justify-content:space-between;align-items:center;font-size:13px}
 .linkbtn{background:none;border:0;color:var(--navy-2);font-weight:600;cursor:pointer;font-size:13px;text-decoration:underline}
 .linkbtn[disabled]{color:#98a2b3;text-decoration:none;cursor:default}
@@ -296,7 +296,7 @@ footer .disc{margin-top:18px;font-size:12px;opacity:.75;border-top:1px solid rgb
 
 .hero-in>*,.about>*,.fee-wrap>*,.loc>*{min-width:0}
 html,body{overflow-x:hidden}
-@media (max-width:420px){th,td{padding:11px 12px;font-size:14px}td:first-child{width:42%}.wrap{padding:0 16px}.otp-inputs{gap:5px}.otp-inputs input{height:46px;font-size:19px}}
+@media (max-width:420px){th,td{padding:11px 12px;font-size:14px}td:first-child{width:42%}.wrap{padding:0 16px}.otp-input{font-size:22px;letter-spacing:.35em}}
 @media (max-width:980px){
   .hero-media{position:relative;inset:auto;aspect-ratio:16/10;max-height:62vh;width:100%}
   .hero-media::after{background:linear-gradient(0deg,var(--navy) 0%,rgba(11,31,77,.35) 28%,transparent 55%)}
@@ -625,8 +625,8 @@ html,body{overflow-x:hidden}
       <div class="msg">Please enter your city or state.</div>
     </div>
     <div class="otp-box">
-      <p>Enter the <span data-otp-len></span>-digit OTP sent to <b data-otp-to></b> <button type="button" class="linkbtn" data-edit>Edit</button></p>
-      <div class="otp-inputs"></div>
+      <p>Enter the OTP sent to <b data-otp-to></b> <button type="button" class="linkbtn" data-edit>Edit</button></p>
+      <input class="otp-input" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="• • • • • •" aria-label="OTP">
       <div class="otp-meta"><span data-timer></span><button type="button" class="linkbtn" data-resend disabled>Resend OTP</button></div>
     </div>
     <button type="submit" class="btn btn-red btn-block"><span class="spin"></span><span data-label>Verify Mobile &amp; Continue</span></button>
@@ -663,7 +663,7 @@ const CONFIG = {
   // "api"  = real SMS OTP (default on the live site)
   // "demo" = no SMS, OTP shown on screen (automatic when opened from localhost / file)
   otpMode:   /^(localhost|127\.0\.0\.1|)$/.test(location.hostname) ? "demo" : "api",
-  otpLength: 6,                     // must match OTP_LENGTH on Vercel (default 6)
+  otpLength: 6,                     // digits in the SMS OTP; the form auto-submits at this length (4–8 still accepted)
   autoPopupSeconds: 12              // show the popup form after N seconds (0 = off)
 };
 /* ===================================================================== */
@@ -755,11 +755,7 @@ function initForm(card) {
   const slot = $("[data-form-slot]", card);
   slot.appendChild($("#form-tpl").content.cloneNode(true));
   const form = $("form", card), alertBox = $(".form-alert", card);
-  const otpBox = $(".otp-box", card), N = CONFIG.otpLength;
-  $(".otp-inputs", card).innerHTML = Array.from({ length: N }, (_, i) =>
-    `<input inputmode="numeric" maxlength="${N}" aria-label="OTP digit ${i + 1}"${i ? "" : ' autocomplete="one-time-code"'}>`).join("");
-  $("[data-otp-len]", card).textContent = N;
-  const otpInputs = $$(".otp-inputs input", card);
+  const otpBox = $(".otp-box", card), N = CONFIG.otpLength, otpInput = $(".otp-input", card);
   const btn = $("button[type=submit]", card), label = $("[data-label]", card);
   const timerEl = $("[data-timer]", card), resend = $("[data-resend]", card);
   const provider = makeOtpProvider();
@@ -804,7 +800,7 @@ function initForm(card) {
       otpBox.classList.add("show");
       form.elements.phone.readOnly = true;
       label.textContent = "Verify OTP & Submit";
-      otpInputs.forEach(i => i.value = ""); otpInputs[0].focus();
+      otpInput.value = ""; otpInput.focus();
       startTimer();
       if (res && res.demoCode) showAlert(`Demo mode (local preview): your OTP is ${res.demoCode}. The live site sends a real SMS.`, "ok");
     } catch (err) {
@@ -813,8 +809,8 @@ function initForm(card) {
   }
 
   async function verifyOtp() {
-    const code = otpInputs.map(i => i.value).join("");
-    if (code.length !== N) { showAlert(`Please enter the complete ${N}-digit OTP.`); return; }
+    const code = otpInput.value;
+    if (!/^\d{4,8}$/.test(code)) { showAlert("Please enter the complete OTP from the SMS."); return; }
     if (btn.disabled) return;
     hideAlert(); loading(true);
     try {
@@ -859,21 +855,9 @@ function initForm(card) {
   });
   resend.addEventListener("click", () => { provider.reset(); sendOtp(); });
 
-  otpInputs.forEach((inp, i) => {
-    inp.addEventListener("input", () => {
-      inp.value = inp.value.replace(/\D/g, "");
-      if (inp.value.length > 1) {                       // pasted / SMS-autofilled full code
-        const d = inp.value.slice(0, N).split("");
-        otpInputs.forEach((o, k) => o.value = d[k] || "");
-        otpInputs[Math.min(d.length, N - 1)].focus();
-      } else if (inp.value && i < N - 1) otpInputs[i + 1].focus();
-      if (otpInputs.every(o => o.value)) verifyOtp();
-    });
-    inp.addEventListener("keydown", e => { if (e.key === "Backspace" && !inp.value && i > 0) otpInputs[i - 1].focus(); });
-    inp.addEventListener("paste", e => {
-      const d = (e.clipboardData.getData("text") || "").replace(/\D/g, "").slice(0, N);
-      if (d.length) { e.preventDefault(); otpInputs.forEach((o, k) => o.value = d[k] || ""); if (d.length === N) verifyOtp(); }
-    });
+  otpInput.addEventListener("input", () => {
+    otpInput.value = otpInput.value.replace(/\D/g, "").slice(0, 8);
+    if (otpInput.value.length === N) verifyOtp();      // auto-submit; other lengths use the button
   });
 }
 

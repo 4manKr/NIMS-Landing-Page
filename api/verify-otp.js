@@ -1,8 +1,10 @@
 // POST /api/verify-otp  { phone, otp, ticket }
-// Checks the entered OTP against the keyed hash inside the signed ticket from /api/send-otp.
-// On success returns a "verified" token for this phone that /api/submit-lead accepts for 30 minutes.
-const crypto = require("crypto");
-const { PHONE_RE, sign, unsign, otpHash, send, body, sameOrigin } = require("./_lib");
+// Step 2 of SEO Age Digital's 2Factor API (verify_otp.php). On success returns a signed
+// "verified" token for this phone that /api/submit-lead accepts for 30 minutes.
+const { PHONE_RE, sign, unsign, send, body, sameOrigin, smsApi } = require("./_lib");
+
+// Provider failure codes → codes the page understands
+const CODES = { 419: "invalid_otp", 421: "expired", 422: "expired" };
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") return send(res, 405, { ok: false, code: "method" });
@@ -17,9 +19,19 @@ module.exports = async (req, res) => {
   if (!t || t.t !== "otp") return send(res, 400, { ok: false, code: "expired" });
   if (t.p !== phone) return send(res, 400, { ok: false, code: "invalid_phone" });
 
-  const a = Buffer.from(otpHash(phone, String(otp), t.exp)), b = Buffer.from(String(t.h || ""));
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return send(res, 400, { ok: false, code: "invalid_otp" });
-
-  const token = sign({ t: "verified", p: phone, exp: Date.now() + 30 * 60 * 1000 });
-  return send(res, 200, { ok: true, token });
+  try {
+    const data = await smsApi("verify_otp.php", {
+      auth: process.env.SMS_API_KEY || "", msisdn: phone, logid: t.l, otp: String(otp)
+    });
+    if (data.status !== "success") {
+      const code = CODES[Number(data.code)];
+      if (!code) console.error("verify-otp: provider error", JSON.stringify(data));
+      return send(res, code ? 400 : 502, { ok: false, code: code || "provider" });
+    }
+    const token = sign({ t: "verified", p: phone, exp: Date.now() + 30 * 60 * 1000 });
+    return send(res, 200, { ok: true, token });
+  } catch (err) {
+    console.error("verify-otp: request failed", err);
+    return send(res, 502, { ok: false, code: "provider" });
+  }
 };
