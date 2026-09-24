@@ -625,13 +625,10 @@ html,body{overflow-x:hidden}
       <div class="msg">Please enter your city or state.</div>
     </div>
     <div class="otp-box">
-      <p>Enter the 6-digit OTP sent to <b data-otp-to></b> <button type="button" class="linkbtn" data-edit>Edit</button></p>
-      <div class="otp-inputs">
-        <input inputmode="numeric" maxlength="1" autocomplete="one-time-code"><input inputmode="numeric" maxlength="1"><input inputmode="numeric" maxlength="1"><input inputmode="numeric" maxlength="1"><input inputmode="numeric" maxlength="1"><input inputmode="numeric" maxlength="1">
-      </div>
+      <p>Enter the <span data-otp-len></span>-digit OTP sent to <b data-otp-to></b> <button type="button" class="linkbtn" data-edit>Edit</button></p>
+      <div class="otp-inputs"></div>
       <div class="otp-meta"><span data-timer></span><button type="button" class="linkbtn" data-resend disabled>Resend OTP</button></div>
     </div>
-    <div class="recaptcha"></div>
     <button type="submit" class="btn btn-red btn-block"><span class="spin"></span><span data-label>Verify Mobile &amp; Continue</span></button>
     <p class="form-note">🔒 Your details are safe. We never share your number.</p>
   </form>
@@ -653,30 +650,20 @@ html,body{overflow-x:hidden}
   <symbol id="i-call" viewBox="0 0 24 24"><path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.02-.24c1.12.37 2.33.57 3.57.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1.02z"/></symbol>
 </svg>
 
-<!-- Firebase (phone OTP) -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-
 <script>
 /* =====================================================================
    CONFIG — edit these values before going live
    ===================================================================== */
 const CONFIG = {
-  callNumber:     "919982202706",   // number for "Call" buttons (with country code, no +)
-  whatsappNumber: "919982202706",   // number for WhatsApp chats (with country code, no +)
+  callNumber:     "918368640918",   // number for "Call" buttons (with country code, no +)
+  whatsappNumber: "918368640918",   // number for WhatsApp chats (with country code, no +)
   whatsappText:   "Hi, I want MBBS admission details and the ₹6,00,000 fee concession for NIMS Medical College, Jaipur.",
 
-  // Where verified leads are sent (Google Apps Script web-app URL — see apps-script.gs)
-  leadEndpoint:   "",
-
-  // Firebase project config for real SMS OTP (Firebase Console → Project settings → Web app).
-  // Leave apiKey empty to run in DEMO mode (OTP is shown on screen, no SMS sent).
-  firebase: {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    appId: ""
-  },
+  // OTP via SEO Age Digital SMS (runs through /api/* on Vercel — see SETUP-OTP.md).
+  // "api"  = real SMS OTP (default on the live site)
+  // "demo" = no SMS, OTP shown on screen (automatic when opened from localhost / file)
+  otpMode:   /^(localhost|127\.0\.0\.1|)$/.test(location.hostname) ? "demo" : "api",
+  otpLength: 4,                     // must match the OTP length set in your SEO Age Digital panel
   autoPopupSeconds: 12              // show the popup form after N seconds (0 = off)
 };
 /* ===================================================================== */
@@ -705,67 +692,62 @@ document.addEventListener("click", e => {
   if (a) track(a.hasAttribute("data-call") ? "click_call" : "click_whatsapp");
 });
 
-// ---- OTP provider: Firebase if configured, else demo ----
-const useFirebase = !!CONFIG.firebase.apiKey && window.firebase;
-if (useFirebase) { firebase.initializeApp(CONFIG.firebase); firebase.auth().languageCode = "en"; }
+// ---- OTP provider: SEO Age Digital via /api (live) or on-screen demo (local testing) ----
+async function postJSON(url, data) {
+  let r;
+  try {
+    r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  } catch (e) { throw { code: "network" }; }
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok || !out.ok) throw { code: out.code || "server" };
+  return out;
+}
 
-function makeOtpProvider(recaptchaEl) {
-  if (useFirebase) {
-    let verifier, confirmation;
+function makeOtpProvider() {
+  if (CONFIG.otpMode === "api") {
+    let ticket, phone;
     return {
-      async send(phone) {
-        if (!verifier) verifier = new firebase.auth.RecaptchaVerifier(recaptchaEl, { size: "invisible" });
-        confirmation = await firebase.auth().signInWithPhoneNumber("+91" + phone, verifier);
-      },
-      async verify(code) {
-        await confirmation.confirm(code);
-        firebase.auth().signOut().catch(() => {});
-        return true;
-      },
-      reset() { try { verifier && verifier.clear(); } catch (e) {} verifier = null; recaptchaEl.innerHTML = ""; }
+      async send(p) { phone = p; ({ ticket } = await postJSON("/api/send-otp", { phone })); },
+      async verify(otp) { return (await postJSON("/api/verify-otp", { phone, otp, ticket })).token; },
+      reset() { ticket = null; }
     };
   }
   let expected;
   return {
     async send() {
-      expected = String(Math.floor(100000 + Math.random() * 900000));
+      expected = String(Math.floor(10 ** (CONFIG.otpLength - 1) + Math.random() * 9 * 10 ** (CONFIG.otpLength - 1)));
       await new Promise(r => setTimeout(r, 600));
       return { demoCode: expected };
     },
-    async verify(code) { if (code !== expected) throw { code: "auth/invalid-verification-code" }; return true; },
+    async verify(code) { if (code !== expected) throw { code: "invalid_otp" }; return "demo"; },
     reset() {}
   };
 }
 
 function errText(err) {
-  const c = (err && err.code) || "";
-  if (c.includes("invalid-verification-code")) return "Incorrect OTP. Please check and try again.";
-  if (c.includes("code-expired")) return "OTP expired. Please resend.";
-  if (c.includes("too-many-requests")) return "Too many attempts. Please try again after some time.";
-  if (c.includes("invalid-phone-number")) return "This mobile number looks invalid.";
-  return "Something went wrong. Please try again or contact us on WhatsApp.";
+  const messages = {
+    invalid_otp: "Incorrect OTP. Please check and try again.",
+    expired: "OTP expired. Please tap Resend OTP.",
+    invalid_phone: "This mobile number looks invalid.",
+    network: "No internet connection. Please check and try again.",
+    not_verified: "Your verification expired. Please verify your number again."
+  };
+  return messages[err && err.code] || "Couldn't send/verify OTP right now. Please try again or WhatsApp us.";
 }
 
 // ---- Lead submit ----
-function sendLead(lead) {
+async function sendLead(lead, token) {
   const qs = new URLSearchParams(location.search);
   const payload = {
-    ...lead,
-    phone: "+91" + lead.phone,
+    ...lead, token,
     college: "NIMS Medical College and Hospital, Jaipur",
     course: "MBBS",
     source_url: location.href,
     utm_source: qs.get("utm_source") || "", utm_medium: qs.get("utm_medium") || "",
-    utm_campaign: qs.get("utm_campaign") || "", gclid: qs.get("gclid") || "", fbclid: qs.get("fbclid") || "",
-    submitted_at: new Date().toISOString()
+    utm_campaign: qs.get("utm_campaign") || "", gclid: qs.get("gclid") || "", fbclid: qs.get("fbclid") || ""
   };
-  try { localStorage.setItem("nims_lead", JSON.stringify(payload)); } catch (e) {}
-  if (!CONFIG.leadEndpoint) { console.info("[Lead captured — set CONFIG.leadEndpoint to store it]", payload); return Promise.resolve(); }
-  return fetch(CONFIG.leadEndpoint, {
-    method: "POST", mode: "no-cors",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(payload)
-  }).catch(err => console.warn("Lead send failed", err));
+  if (CONFIG.otpMode !== "api") { console.info("[Demo lead — not stored]", payload); return; }
+  await postJSON("/api/submit-lead", payload);
 }
 
 // ---- Form controller ----
@@ -773,11 +755,15 @@ function initForm(card) {
   const slot = $("[data-form-slot]", card);
   slot.appendChild($("#form-tpl").content.cloneNode(true));
   const form = $("form", card), alertBox = $(".form-alert", card);
-  const otpBox = $(".otp-box", card), otpInputs = $$(".otp-inputs input", card);
+  const otpBox = $(".otp-box", card), N = CONFIG.otpLength;
+  $(".otp-inputs", card).innerHTML = Array.from({ length: N }, (_, i) =>
+    `<input inputmode="numeric" maxlength="${N}" aria-label="OTP digit ${i + 1}"${i ? "" : ' autocomplete="one-time-code"'}>`).join("");
+  $("[data-otp-len]", card).textContent = N;
+  const otpInputs = $$(".otp-inputs input", card);
   const btn = $("button[type=submit]", card), label = $("[data-label]", card);
   const timerEl = $("[data-timer]", card), resend = $("[data-resend]", card);
-  const provider = makeOtpProvider($(".recaptcha", card));
-  let stage = "details", timer, verifiedPhone = null;
+  const provider = makeOtpProvider();
+  let stage = "details", timer, verifiedPhone = null, verifiedToken = null;
 
   const val = n => form.elements[n].value.trim();
   const setErr = (f, on) => $(`[data-f=${f}]`, card).classList.toggle("err", on);
@@ -820,7 +806,7 @@ function initForm(card) {
       label.textContent = "Verify OTP & Submit";
       otpInputs.forEach(i => i.value = ""); otpInputs[0].focus();
       startTimer();
-      if (res && res.demoCode) showAlert(`Demo mode: your OTP is ${res.demoCode} (connect Firebase to send real SMS).`, "ok");
+      if (res && res.demoCode) showAlert(`Demo mode (local preview): your OTP is ${res.demoCode}. The live site sends a real SMS.`, "ok");
     } catch (err) {
       console.error(err); provider.reset(); showAlert(errText(err));
     } finally { loading(false); }
@@ -828,20 +814,28 @@ function initForm(card) {
 
   async function verifyOtp() {
     const code = otpInputs.map(i => i.value).join("");
-    if (code.length !== 6) { showAlert("Please enter the complete 6-digit OTP."); return; }
+    if (code.length !== N) { showAlert(`Please enter the complete ${N}-digit OTP.`); return; }
+    if (btn.disabled) return;
     hideAlert(); loading(true);
     try {
-      await provider.verify(code);
+      verifiedToken = await provider.verify(code);
       verifiedPhone = val("phone");
+      $("[data-f=phone]", card).classList.add("verified");
       clearInterval(timer);
-      await finish();
-    } catch (err) { console.error(err); showAlert(errText(err)); }
-    finally { loading(false); }
+    } catch (err) { console.error(err); showAlert(errText(err)); loading(false); return; }
+    await finish();
   }
 
   async function finish() {
-    const lead = { name: val("name"), phone: verifiedPhone, location: val("location"), phone_verified: "yes" };
-    await sendLead(lead);
+    const lead = { name: val("name"), phone: verifiedPhone, location: val("location") };
+    loading(true);
+    try { await sendLead(lead, verifiedToken); }
+    catch (err) {
+      console.error(err); loading(false);
+      if (err.code === "not_verified") { verifiedPhone = verifiedToken = null; $("[data-f=phone]", card).classList.remove("verified"); $("[data-edit]", card).click(); }
+      showAlert(errText(err)); return;
+    }
+    loading(false);
     track("generate_lead", { method: "otp_form" });
     $("[data-sname]", card).textContent = lead.name.split(" ")[0];
     const wa = $("[data-wa-lead]", card);
@@ -868,17 +862,17 @@ function initForm(card) {
   otpInputs.forEach((inp, i) => {
     inp.addEventListener("input", () => {
       inp.value = inp.value.replace(/\D/g, "");
-      if (inp.value.length > 1) {                       // pasted / autofilled full code
-        const d = inp.value.slice(0, 6).split("");
+      if (inp.value.length > 1) {                       // pasted / SMS-autofilled full code
+        const d = inp.value.slice(0, N).split("");
         otpInputs.forEach((o, k) => o.value = d[k] || "");
-        otpInputs[Math.min(d.length, 5)].focus();
-      } else if (inp.value && i < 5) otpInputs[i + 1].focus();
+        otpInputs[Math.min(d.length, N - 1)].focus();
+      } else if (inp.value && i < N - 1) otpInputs[i + 1].focus();
       if (otpInputs.every(o => o.value)) verifyOtp();
     });
     inp.addEventListener("keydown", e => { if (e.key === "Backspace" && !inp.value && i > 0) otpInputs[i - 1].focus(); });
     inp.addEventListener("paste", e => {
-      const d = (e.clipboardData.getData("text") || "").replace(/\D/g, "").slice(0, 6);
-      if (d.length) { e.preventDefault(); otpInputs.forEach((o, k) => o.value = d[k] || ""); if (d.length === 6) verifyOtp(); }
+      const d = (e.clipboardData.getData("text") || "").replace(/\D/g, "").slice(0, N);
+      if (d.length) { e.preventDefault(); otpInputs.forEach((o, k) => o.value = d[k] || ""); if (d.length === N) verifyOtp(); }
     });
   });
 }

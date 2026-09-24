@@ -5,7 +5,8 @@
  * 1. Create a Google Sheet → Extensions → Apps Script → paste this file → Save.
  * 2. Deploy → New deployment → type "Web app"
  *      Execute as: Me    |    Who has access: Anyone
- * 3. Copy the Web app URL and paste it into CONFIG.leadEndpoint in index.html.
+ * 3. Copy the Web app URL and add it in Vercel as the env variable LEAD_WEBHOOK_URL, then redeploy.
+ *    (Leads reach the sheet only after OTP verification, via /api/submit-lead.)
  */
 const HEADERS = ["submitted_at", "name", "phone", "location", "phone_verified", "college", "course",
                  "utm_source", "utm_medium", "utm_campaign", "gclid", "fbclid", "source_url"];

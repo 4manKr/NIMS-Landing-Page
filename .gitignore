@@ -1,2 +1,5 @@
 .claude/
 0923 (2).mp4
+.env
+.env.local
+.vercel/
