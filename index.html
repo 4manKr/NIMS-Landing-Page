@@ -663,7 +663,7 @@ const CONFIG = {
   // "api"  = real SMS OTP (default on the live site)
   // "demo" = no SMS, OTP shown on screen (automatic when opened from localhost / file)
   otpMode:   /^(localhost|127\.0\.0\.1|)$/.test(location.hostname) ? "demo" : "api",
-  otpLength: 4,                     // must match the OTP length set in your SEO Age Digital panel
+  otpLength: 6,                     // must match OTP_LENGTH on Vercel (default 6)
   autoPopupSeconds: 12              // show the popup form after N seconds (0 = off)
 };
 /* ===================================================================== */
