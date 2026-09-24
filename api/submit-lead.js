@@ -3,7 +3,7 @@
 // then forwards it to the Google Sheet (LEAD_WEBHOOK_URL = Apps Script web-app URL).
 const { PHONE_RE, unsign, send, body } = require("./_lib");
 
-const FIELDS = ["name", "location", "college", "course", "source_url",
+const FIELDS = ["name", "email", "location", "college", "course", "source_url",
                 "utm_source", "utm_medium", "utm_campaign", "gclid", "fbclid"];
 
 module.exports = async (req, res) => {
@@ -19,6 +19,7 @@ module.exports = async (req, res) => {
 
   const lead = { submitted_at: new Date().toISOString(), phone: "+91" + phone, phone_verified: "yes" };
   FIELDS.forEach(f => { lead[f] = String(b[f] || "").slice(0, 300); });
+  if (lead.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(lead.email)) lead.email = "";
 
   const hook = process.env.LEAD_WEBHOOK_URL;
   if (!hook) {

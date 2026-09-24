@@ -619,6 +619,11 @@ html,body{overflow-x:hidden}
       <div class="msg">Enter a valid 10-digit Indian mobile number.</div>
       <div class="verified-tag"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>Number verified</div>
     </div>
+    <div class="field" data-f="email">
+      <label>Email <span style="font-weight:500;color:var(--muted)">(optional)</span></label>
+      <input name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" maxlength="100">
+      <div class="msg">Please enter a valid email or leave it empty.</div>
+    </div>
     <div class="field" data-f="location">
       <label>City / State</label>
       <input name="location" type="text" list="states" autocomplete="address-level2" placeholder="e.g. Jaipur, Rajasthan" maxlength="80">
@@ -772,14 +777,15 @@ function initForm(card) {
     if (verifiedPhone && e.target.value !== verifiedPhone) { verifiedPhone = null; $("[data-f=phone]", card).classList.remove("verified"); }
   });
   form.elements.name.addEventListener("input", e => { e.target.value = e.target.value.replace(/[^a-zA-Z .'-]/g, ""); });
-  ["name", "phone", "location"].forEach(n => form.elements[n].addEventListener("input", () => setErr(n, false)));
+  ["name", "phone", "email", "location"].forEach(n => form.elements[n].addEventListener("input", () => setErr(n, false)));
 
   function validate() {
     const okName = /^[a-zA-Z][a-zA-Z .'-]{1,59}$/.test(val("name"));
     const okPhone = /^[6-9]\d{9}$/.test(val("phone"));
+    const okEmail = !val("email") || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(val("email"));
     const okLoc = val("location").length >= 2;
-    setErr("name", !okName); setErr("phone", !okPhone); setErr("location", !okLoc);
-    return okName && okPhone && okLoc;
+    setErr("name", !okName); setErr("phone", !okPhone); setErr("email", !okEmail); setErr("location", !okLoc);
+    return okName && okPhone && okEmail && okLoc;
   }
 
   function startTimer() {
@@ -823,7 +829,7 @@ function initForm(card) {
   }
 
   async function finish() {
-    const lead = { name: val("name"), phone: verifiedPhone, location: val("location") };
+    const lead = { name: val("name"), phone: verifiedPhone, email: val("email"), location: val("location") };
     loading(true);
     try { await sendLead(lead, verifiedToken); }
     catch (err) {

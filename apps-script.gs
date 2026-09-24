@@ -13,7 +13,7 @@
 const NOTIFY_EMAIL = "";
 
 const HEADERS = ["submitted_at", "name", "phone", "location", "phone_verified", "college", "course",
-                 "utm_source", "utm_medium", "utm_campaign", "gclid", "fbclid", "source_url"];
+                 "utm_source", "utm_medium", "utm_campaign", "gclid", "fbclid", "source_url", "email"];
 
 function doPost(e) {
   const lock = LockService.getScriptLock();
@@ -23,6 +23,7 @@ function doPost(e) {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Leads")
                || SpreadsheetApp.getActiveSpreadsheet().insertSheet("Leads");
     if (sheet.getLastRow() === 0) sheet.appendRow(HEADERS);
+    else if (sheet.getLastColumn() < HEADERS.length) sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
     // Prefix with ' so Sheets keeps +91 numbers as text
     sheet.appendRow(HEADERS.map(h => (h === "phone" ? "'" : "") + String(p[h] || "").slice(0, 300)));
   } finally {
@@ -30,7 +31,7 @@ function doPost(e) {
   }
   if (NOTIFY_EMAIL) {
     MailApp.sendEmail(NOTIFY_EMAIL, "New MBBS lead: " + (p.name || "") + " (" + (p.phone || "") + ")",
-      "Name: " + (p.name || "") + "\nPhone: " + (p.phone || "") + " (OTP verified)\nLocation: " + (p.location || "") +
+      "Name: " + (p.name || "") + "\nPhone: " + (p.phone || "") + " (OTP verified)\nEmail: " + (p.email || "-") + "\nLocation: " + (p.location || "") +
       "\nSource: " + (p.utm_source || "direct") + " / " + (p.utm_campaign || "-") + "\nTime: " + (p.submitted_at || ""));
   }
   return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
@@ -38,7 +39,7 @@ function doPost(e) {
 
 // Run this once from the editor (select "testLead" → Run) to check the sheet works.
 function testLead() {
-  doPost({ parameter: { submitted_at: new Date().toISOString(), name: "Test Lead", phone: "+919999999999",
+  doPost({ parameter: { submitted_at: new Date().toISOString(), name: "Test Lead", phone: "+919999999999", email: "test@example.com",
                         location: "Jaipur", phone_verified: "yes", college: "NIMS Medical College and Hospital, Jaipur",
                         course: "MBBS" } });
 }
