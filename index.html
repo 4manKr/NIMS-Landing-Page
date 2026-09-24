@@ -626,7 +626,7 @@ html,body{overflow-x:hidden}
     </div>
     <div class="otp-box">
       <p>Enter the OTP sent to <b data-otp-to></b> <button type="button" class="linkbtn" data-edit>Edit</button></p>
-      <input class="otp-input" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="• • • • • •" aria-label="OTP">
+      <input class="otp-input" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="• • • • • •" aria-label="OTP">
       <div class="otp-meta"><span data-timer></span><button type="button" class="linkbtn" data-resend disabled>Resend OTP</button></div>
     </div>
     <button type="submit" class="btn btn-red btn-block"><span class="spin"></span><span data-label>Verify Mobile &amp; Continue</span></button>
@@ -663,7 +663,7 @@ const CONFIG = {
   // "api"  = real SMS OTP (default on the live site)
   // "demo" = no SMS, OTP shown on screen (automatic when opened from localhost / file)
   otpMode:   /^(localhost|127\.0\.0\.1|)$/.test(location.hostname) ? "demo" : "api",
-  otpLength: 6,                     // digits in the SMS OTP; the form auto-submits at this length (4–8 still accepted)
+  otpLength: 6,                     // digits in the SMS OTP (the server always sends 6)
   autoPopupSeconds: 12              // show the popup form after N seconds (0 = off)
 };
 /* ===================================================================== */
@@ -810,7 +810,7 @@ function initForm(card) {
 
   async function verifyOtp() {
     const code = otpInput.value;
-    if (!/^\d{4,8}$/.test(code)) { showAlert("Please enter the complete OTP from the SMS."); return; }
+    if (code.length !== N) { showAlert(`Please enter the ${N}-digit OTP from the SMS.`); return; }
     if (btn.disabled) return;
     hideAlert(); loading(true);
     try {
@@ -856,8 +856,8 @@ function initForm(card) {
   resend.addEventListener("click", () => { provider.reset(); sendOtp(); });
 
   otpInput.addEventListener("input", () => {
-    otpInput.value = otpInput.value.replace(/\D/g, "").slice(0, 8);
-    if (otpInput.value.length === N) verifyOtp();      // auto-submit; other lengths use the button
+    otpInput.value = otpInput.value.replace(/\D/g, "").slice(0, N);
+    if (otpInput.value.length === N) verifyOtp();      // auto-submit once all digits are in
   });
 }
 

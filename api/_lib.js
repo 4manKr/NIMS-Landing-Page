@@ -32,6 +32,11 @@ function unsign(token) {
   }
 }
 
+// Keyed hash of an OTP, bound to the phone and expiry, so the ticket never reveals the code.
+function otpHash(phone, otp, exp) {
+  return b64(crypto.createHmac("sha256", secret()).update(`otp:${phone}:${otp}:${exp}`).digest());
+}
+
 // Call an SEO Age Digital (DataGenIt) HTTP API endpoint, e.g. "generate_otp.php", and return its JSON.
 async function smsApi(endpoint, params) {
   const base = (process.env.SMS_API_BASE || "http://sms.seoagedigital.com/API").replace(/\/$/, "");
@@ -57,4 +62,4 @@ function sameOrigin(req) {
   try { return new URL(origin).host === req.headers.host; } catch (e) { return false; }
 }
 
-module.exports = { PHONE_RE, sign, unsign, send, body, sameOrigin, smsApi };
+module.exports = { PHONE_RE, sign, unsign, otpHash, send, body, sameOrigin, smsApi };
